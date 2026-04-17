@@ -1,0 +1,38 @@
+services:
+  game-manager:
+    build: ./game-manager
+    container_name: game-manager
+    ports:
+      - "5000:5000"
+    networks:
+      - autochess-net
+    depends_on:
+      matchmaking:
+        condition: service_healthy
+      battle-engine:
+        condition: service_healthy
+    environment:
+      - FLASK_ENV=development
+    restart: on-failure
+
+  matchmaking:
+    build: ./matchmaking
+    container_name: matchmaking
+    networks:
+      - autochess-net
+    environment:
+      - FLASK_ENV=development
+    restart: on-failure
+
+  battle-engine:
+    build: ./battle-engine
+    container_name: battle-engine
+    networks:
+      - autochess-net
+    environment:
+      - FLASK_ENV=development
+    restart: on-failure
+
+networks:
+  autochess-net:
+    driver: bridge

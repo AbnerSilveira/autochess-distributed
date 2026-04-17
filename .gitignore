@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+.cursor/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Arquivos de teste temporários
+body.json
+body_fb.json
+body_idemp.json
+*.tmp
+
+# Docker
+.docker/
+
+# Sensíveis (por segurança, caso futuramente adicione)
+.env
+.env.local
+*.pem
+*.key

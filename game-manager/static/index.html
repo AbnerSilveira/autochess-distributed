@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>AutoChess Distribuído</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1a1530;
+    --bg2: #0f0b1f;
+    --panel: #2d2250;
+    --border: #5a4a9e;
+    --accent: #ffcc00;
+    --player: #4ade80;
+    --opponent: #ef4444;
+    --text: #e8e3ff;
+    --muted: #9b95c7;
+    --hp-bg: #1a0b1f;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Press Start 2P', monospace;
+    background:
+      linear-gradient(0deg, var(--bg) 0%, var(--bg2) 100%),
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.02) 2px, rgba(255,255,255,0.02) 4px);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+    font-size: 10px;
+    image-rendering: pixelated;
+  }
+
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    border: 4px solid var(--border);
+    background: var(--panel);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    box-shadow: 0 0 0 4px var(--bg), 0 0 0 6px var(--border);
+  }
+  .title { color: var(--accent); font-size: 14px; letter-spacing: 2px; }
+  .status { font-size: 8px; color: var(--muted); }
+  .status.online { color: var(--player); }
+
+  /* Placar do torneio */
+  .scoreboard {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 10px;
+  }
+  .score-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .score-side .label { font-size: 7px; color: var(--muted); }
+  .score-side .value { font-size: 20px; }
+  .score-side.player .value { color: var(--player); }
+  .score-side.opponent .value { color: var(--opponent); }
+  .score-x { font-size: 14px; color: var(--muted); padding: 0 4px; }
+
+  .history-dots { display: flex; gap: 4px; margin-left: 12px; }
+  .dot {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    background: var(--bg2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6px;
+  }
+  .dot.win { background: var(--player); color: var(--bg); border-color: var(--player); }
+  .dot.lose { background: var(--opponent); color: var(--bg); border-color: var(--opponent); }
+  .dot.draw { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  /* Painel */
+  .panel {
+    border: 4px solid var(--border);
+    background: var(--panel);
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 0 0 4px var(--bg), 0 0 0 6px var(--border);
+  }
+
+  .section-label {
+    color: var(--accent);
+    font-size: 10px;
+    margin-bottom: 10px;
+    letter-spacing: 2px;
+  }
+  .section-label.opponent { color: var(--opponent); }
+  .section-label.player { color: var(--player); }
+
+  /* Grid de seleção — 5 colunas pra caber 10 campeões em 2 linhas */
+  .champion-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  /* Card */
+  .card {
+    border: 3px solid var(--border);
+    background: var(--bg2);
+    padding: 8px 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.1s, opacity 0.3s;
+    position: relative;
+  }
+  .card:hover { border-color: var(--accent); transform: translate(-2px, -2px); }
+  .card.selected { border-color: var(--accent); background: #3d2f70; }
+  .card.selected::before {
+    content: "★";
+    position: absolute;
+    top: 2px; right: 4px;
+    color: var(--accent);
+    font-size: 10px;
+  }
+  .card.locked { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+  .card.locked::after {
+    content: "USADO";
+    position: absolute;
+    top: 4px; left: 4px;
+    background: var(--opponent);
+    color: white;
+    font-size: 6px;
+    padding: 2px 3px;
+  }
+  .card.dead { opacity: 0.3; filter: grayscale(1); }
+  .card.dead::after {
+    content: "DEFEATED";
+    position: absolute;
+    top: 50%; left: 0; right: 0;
+    transform: translateY(-50%) rotate(-15deg);
+    color: var(--opponent);
+    font-size: 8px;
+    text-shadow: 2px 2px 0 black;
+  }
+  .card.attacking { animation: shake 0.3s; border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  .card.hit { animation: flash 0.3s; }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+  @keyframes flash {
+    0%,100% { background: var(--bg2); }
+    50% { background: #ff4444; }
+  }
+
+  .card svg {
+    width: 52px; height: 52px;
+    image-rendering: pixelated;
+    margin-bottom: 4px;
+  }
+
+  .card-name { font-size: 8px; color: var(--accent); margin-bottom: 3px; }
+  .card-stats { font-size: 6px; color: var(--muted); line-height: 1.6; }
+
+  /* Barra HP */
+  .hp-bar {
+    margin-top: 5px;
+    height: 9px;
+    background: var(--hp-bg);
+    border: 2px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .hp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--player), #a3e635);
+    transition: width 0.4s ease-out;
+  }
+  .hp-fill.medium { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  .hp-fill.low { background: linear-gradient(90deg, var(--opponent), #dc2626); }
+  .hp-text {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6px; color: white;
+    text-shadow: 1px 1px 0 black;
+  }
+
+  /* Dano flutuante */
+  .damage-float {
+    position: absolute;
+    top: 30%; left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    color: #ff6666;
+    text-shadow: 2px 2px 0 black;
+    animation: floatUp 1s ease-out forwards;
+    pointer-events: none;
+    z-index: 10;
+    font-weight: bold;
+  }
+  .damage-float.skill { color: var(--accent); font-size: 18px; }
+
+  @keyframes floatUp {
+    0% { opacity: 0; transform: translate(-50%, 0); }
+    20% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -36px); }
+  }
+
+  /* Botões */
+  .btn {
+    font-family: inherit;
+    font-size: 10px;
+    padding: 10px 18px;
+    background: var(--accent);
+    color: var(--bg);
+    border: 3px solid #cc9900;
+    cursor: pointer;
+    letter-spacing: 2px;
+    box-shadow: 4px 4px 0 var(--bg2);
+    transition: all 0.1s;
+  }
+  .btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--bg2); }
+  .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--bg2); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: 4px 4px 0 var(--bg2); }
+  .btn.secondary { background: var(--panel); color: var(--text); border-color: var(--border); }
+  .btn.small { padding: 6px 10px; font-size: 8px; }
+  .btn.active { background: var(--player); color: var(--bg); border-color: #16a34a; }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+
+  .speed-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .speed-label { font-size: 8px; color: var(--muted); margin-right: 4px; }
+
+  /* Log */
+  .log-panel {
+    max-height: 180px;
+    overflow-y: auto;
+    background: var(--bg2);
+    padding: 10px;
+    border: 2px solid var(--border);
+    font-size: 8px;
+    line-height: 1.8;
+  }
+  .log-entry { opacity: 0; animation: fadeIn 0.3s forwards; padding: 1px 0; }
+  .log-entry.player-action { color: var(--player); }
+  .log-entry.opponent-action { color: var(--opponent); }
+  .log-entry.death { color: var(--accent); font-weight: bold; }
+  .log-entry.skill { color: var(--accent); }
+  .log-entry.turn-header {
+    color: var(--accent);
+    text-align: center;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+    padding-top: 4px;
+  }
+
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  .log-panel::-webkit-scrollbar { width: 8px; }
+  .log-panel::-webkit-scrollbar-track { background: var(--bg); }
+  .log-panel::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* Resultado */
+  .result-screen {
+    text-align: center;
+    padding: 30px 20px;
+  }
+  .result-title {
+    font-size: 26px;
+    margin-bottom: 16px;
+    letter-spacing: 3px;
+    animation: pulse 1s infinite;
+  }
+  .result-title.win { color: var(--player); }
+  .result-title.lose { color: var(--opponent); }
+  .result-title.draw { color: var(--accent); }
+
+  @keyframes pulse {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  .result-info { font-size: 9px; color: var(--muted); margin-bottom: 16px; line-height: 2; }
+  .tiebreak-info {
+    font-size: 8px;
+    color: var(--accent);
+    margin: 8px 0;
+    font-style: italic;
+  }
+
+  /* Times */
+  .team-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .hidden { display: none !important; }
+
+  .selection-counter {
+    text-align: center;
+    margin: 10px 0;
+    color: var(--muted);
+    font-size: 9px;
+  }
+  .selection-counter span { color: var(--accent); }
+
+  .round-banner {
+    text-align: center;
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 10px;
+    letter-spacing: 3px;
+    animation: fadeIn 0.5s;
+  }
+
+  .warning-msg {
+    text-align: center;
+    font-size: 8px;
+    color: var(--opponent);
+    margin-top: 8px;
+    min-height: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="title">⚔ AUTOCHESS BO5 ⚔</div>
+    <div class="scoreboard" id="scoreboard">
+      <div class="score-side player">
+        <span class="label">VOCÊ</span>
+        <span class="value" id="score-player">0</span>
+      </div>
+      <div class="score-x">×</div>
+      <div class="score-side opponent">
+        <span class="label">CPU</span>
+        <span class="value" id="score-opponent">0</span>
+      </div>
+      <div class="history-dots" id="history-dots"></div>
+    </div>
+    <div class="status" id="status">● VERIFICANDO...</div>
+  </div>
+
+  <!-- TELA 1: SELEÇÃO DE TIME (mostrada a cada rodada) -->
+  <div id="screen-select" class="panel">
+    <div class="round-banner" id="round-banner">ROUND 1 / 5</div>
+    <div class="section-label">SELECIONE SEU TIME (1 A 5 CAMPEÕES)</div>
+    <div class="champion-grid" id="champion-grid"></div>
+    <div class="selection-counter">Selecionados: <span id="selected-count">0</span> / 5</div>
+    <div class="warning-msg" id="warning-msg"></div>
+    <div class="controls">
+      <button class="btn" id="btn-start" disabled>▶ BATALHAR</button>
+    </div>
+  </div>
+
+  <!-- TELA 2: BATALHA -->
+  <div id="screen-battle" class="hidden">
+    <div class="round-banner" id="round-banner-battle">ROUND 1 / 5</div>
+    <div class="panel">
+      <div class="section-label opponent">━━━ OPONENTE ━━━</div>
+      <div class="team-row" id="opponent-team"></div>
+    </div>
+
+    <div class="panel">
+      <div class="section-label">BATTLE LOG</div>
+      <div class="log-panel" id="battle-log"></div>
+    </div>
+
+    <div class="panel">
+      <div class="section-label player">━━━ SEU TIME ━━━</div>
+      <div class="team-row" id="player-team"></div>
+    </div>
+
+    <div class="controls">
+      <div class="speed-controls">
+        <span class="speed-label">VELOCIDADE:</span>
+        <button class="btn small speed-btn active" data-speed="1">🐢 1x</button>
+        <button class="btn small speed-btn" data-speed="2">🐰 2x</button>
+        <button class="btn secondary small" id="btn-skip">⏩ PULAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELA 3: RESULTADO DA RODADA -->
+  <div id="screen-round-result" class="panel hidden">
+    <div class="result-screen">
+      <div class="result-title" id="round-result-title">VITÓRIA!</div>
+      <div class="result-info" id="round-result-info"></div>
+      <div class="tiebreak-info" id="round-tiebreak"></div>
+      <button class="btn" id="btn-next-round">PRÓXIMA RODADA ▶</button>
+    </div>
+  </div>
+
+  <!-- TELA 4: RESULTADO FINAL DO TORNEIO -->
+  <div id="screen-final" class="panel hidden">
+    <div class="result-screen">
+      <div class="result-title" id="final-title">CAMPEÃO DO TORNEIO!</div>
+      <div class="result-info" id="final-info"></div>
+      <button class="btn" id="btn-restart">↻ NOVO TORNEIO</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// SPRITES — PIXEL ART DOS 10 CAMPEÕES
+// ============================================================
+const SPRITES = {
+  warrior: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="6" y="2" width="4" height="3" fill="#fbbf24"/>
+    <rect x="6" y="5" width="4" height="1" fill="#fde68a"/>
+    <rect x="5" y="6" width="6" height="4" fill="#dc2626"/>
+    <rect x="4" y="7" width="1" height="2" fill="#991b1b"/>
+    <rect x="11" y="7" width="1" height="2" fill="#991b1b"/>
+    <rect x="12" y="4" width="1" height="8" fill="#9ca3af"/>
+    <rect x="11" y="11" width="3" height="1" fill="#6b7280"/>
+    <rect x="6" y="10" width="4" height="3" fill="#64748b"/>
+    <rect x="6" y="13" width="2" height="2" fill="#4b5563"/>
+    <rect x="8" y="13" width="2" height="2" fill="#4b5563"/>
+  </svg>`,
+
+  mage: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="6" y="1" width="4" height="1" fill="#7c3aed"/>
+    <rect x="5" y="2" width="6" height="2" fill="#8b5cf6"/>
+    <rect x="6" y="4" width="4" height="2" fill="#fde68a"/>
+    <rect x="5" y="6" width="6" height="6" fill="#7c3aed"/>
+    <rect x="4" y="7" width="1" height="4" fill="#6d28d9"/>
+    <rect x="11" y="7" width="1" height="4" fill="#6d28d9"/>
+    <rect x="3" y="5" width="1" height="9" fill="#92400e"/>
+    <rect x="2" y="4" width="3" height="1" fill="#fbbf24"/>
+    <rect x="2" y="3" width="1" height="1" fill="#f59e0b"/>
+    <rect x="4" y="3" width="1" height="1" fill="#f59e0b"/>
+    <rect x="6" y="12" width="4" height="2" fill="#4c1d95"/>
+  </svg>`,
+
+  archer: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="6" y="2" width="4" height="3" fill="#16a34a"/>
+    <rect x="6" y="3" width="4" height="1" fill="#15803d"/>
+    <rect x="6" y="4" width="4" height="1" fill="#fde68a"/>
+    <rect x="5" y="5" width="6" height="5" fill="#22c55e"/>
+    <rect x="4" y="6" width="1" height="3" fill="#15803d"/>
+    <rect x="11" y="6" width="1" height="3" fill="#15803d"/>
+    <rect x="2" y="4" width="1" height="7" fill="#92400e"/>
+    <rect x="3" y="4" width="1" height="1" fill="#7c2d12"/>
+    <rect x="3" y="10" width="1" height="1" fill="#7c2d12"/>
+    <rect x="2" y="5" width="1" height="5" fill="#dc2626" opacity="0.4"/>
+    <rect x="6" y="10" width="4" height="3" fill="#166534"/>
+    <rect x="6" y="13" width="2" height="2" fill="#4b5563"/>
+    <rect x="8" y="13" width="2" height="2" fill="#4b5563"/>
+  </svg>`,
+
+  tank: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="5" y="1" width="6" height="2" fill="#94a3b8"/>
+    <rect x="5" y="3" width="6" height="1" fill="#cbd5e1"/>
+    <rect x="6" y="4" width="4" height="2" fill="#fde68a"/>
+    <rect x="4" y="6" width="8" height="6" fill="#64748b"/>
+    <rect x="4" y="6" width="8" height="1" fill="#94a3b8"/>
+    <rect x="3" y="7" width="1" height="4" fill="#475569"/>
+    <rect x="12" y="7" width="1" height="4" fill="#475569"/>
+    <rect x="1" y="5" width="3" height="8" fill="#3b82f6"/>
+    <rect x="2" y="6" width="1" height="1" fill="#fbbf24"/>
+    <rect x="2" y="9" width="1" height="3" fill="#fbbf24"/>
+    <rect x="1" y="10" width="3" height="1" fill="#fbbf24"/>
+    <rect x="5" y="12" width="2" height="3" fill="#374151"/>
+    <rect x="9" y="12" width="2" height="3" fill="#374151"/>
+  </svg>`,
+
+  healer: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="5" y="2" width="6" height="3" fill="#fef3c7"/>
+    <rect x="5" y="4" width="6" height="1" fill="#fbbf24"/>
+    <rect x="6" y="5" width="4" height="2" fill="#fde68a"/>
+    <rect x="4" y="7" width="8" height="6" fill="#ffffff"/>
+    <rect x="7" y="8" width="2" height="4" fill="#dc2626"/>
+    <rect x="6" y="9" width="4" height="2" fill="#dc2626"/>
+    <rect x="5" y="13" width="2" height="2" fill="#fbbf24"/>
+    <rect x="9" y="13" width="2" height="2" fill="#fbbf24"/>
+  </svg>`,
+
+  assassin: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="6" y="2" width="4" height="3" fill="#1f2937"/>
+    <rect x="6" y="4" width="4" height="1" fill="#fde68a"/>
+    <rect x="7" y="3" width="1" height="1" fill="#ef4444"/>
+    <rect x="9" y="3" width="1" height="1" fill="#ef4444"/>
+    <rect x="5" y="5" width="6" height="5" fill="#111827"/>
+    <rect x="4" y="6" width="1" height="3" fill="#1f2937"/>
+    <rect x="11" y="6" width="1" height="3" fill="#1f2937"/>
+    <rect x="12" y="3" width="1" height="5" fill="#d1d5db"/>
+    <rect x="12" y="8" width="2" height="1" fill="#6b7280"/>
+    <rect x="2" y="3" width="1" height="5" fill="#d1d5db"/>
+    <rect x="1" y="8" width="2" height="1" fill="#6b7280"/>
+    <rect x="6" y="10" width="4" height="3" fill="#1f2937"/>
+    <rect x="6" y="13" width="2" height="2" fill="#000000"/>
+    <rect x="8" y="13" width="2" height="2" fill="#000000"/>
+  </svg>`,
+
+  paladin: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="5" y="1" width="6" height="2" fill="#fbbf24"/>
+    <rect x="6" y="2" width="1" height="1" fill="#fde68a"/>
+    <rect x="9" y="2" width="1" height="1" fill="#fde68a"/>
+    <rect x="6" y="3" width="4" height="2" fill="#fde68a"/>
+    <rect x="5" y="5" width="6" height="5" fill="#fbbf24"/>
+    <rect x="7" y="6" width="2" height="3" fill="#ffffff"/>
+    <rect x="6" y="7" width="4" height="1" fill="#ffffff"/>
+    <rect x="4" y="6" width="1" height="3" fill="#f59e0b"/>
+    <rect x="11" y="6" width="1" height="3" fill="#f59e0b"/>
+    <rect x="12" y="4" width="1" height="8" fill="#e5e7eb"/>
+    <rect x="11" y="11" width="3" height="1" fill="#9ca3af"/>
+    <rect x="6" y="10" width="4" height="3" fill="#d97706"/>
+    <rect x="6" y="13" width="2" height="2" fill="#78350f"/>
+    <rect x="8" y="13" width="2" height="2" fill="#78350f"/>
+  </svg>`,
+
+  necro: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="5" y="2" width="6" height="3" fill="#1e1b4b"/>
+    <rect x="6" y="4" width="4" height="1" fill="#a78bfa"/>
+    <rect x="7" y="4" width="1" height="1" fill="#22d3ee"/>
+    <rect x="9" y="4" width="1" height="1" fill="#22d3ee"/>
+    <rect x="5" y="5" width="6" height="6" fill="#1e1b4b"/>
+    <rect x="4" y="6" width="1" height="4" fill="#312e81"/>
+    <rect x="11" y="6" width="1" height="4" fill="#312e81"/>
+    <rect x="3" y="4" width="1" height="9" fill="#111827"/>
+    <rect x="2" y="3" width="1" height="1" fill="#10b981"/>
+    <rect x="4" y="3" width="1" height="1" fill="#10b981"/>
+    <rect x="3" y="2" width="1" height="1" fill="#10b981"/>
+    <rect x="3" y="4" width="1" height="1" fill="#10b981"/>
+    <rect x="6" y="11" width="4" height="3" fill="#0f172a"/>
+  </svg>`,
+
+  druid: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="6" y="1" width="4" height="2" fill="#92400e"/>
+    <rect x="5" y="2" width="1" height="2" fill="#92400e"/>
+    <rect x="10" y="2" width="1" height="2" fill="#92400e"/>
+    <rect x="6" y="3" width="4" height="2" fill="#fde68a"/>
+    <rect x="5" y="5" width="6" height="6" fill="#166534"/>
+    <rect x="4" y="6" width="1" height="4" fill="#15803d"/>
+    <rect x="11" y="6" width="1" height="4" fill="#15803d"/>
+    <rect x="6" y="7" width="4" height="2" fill="#22c55e"/>
+    <rect x="7" y="8" width="2" height="1" fill="#4ade80"/>
+    <rect x="13" y="3" width="1" height="9" fill="#78350f"/>
+    <rect x="12" y="2" width="1" height="2" fill="#22c55e"/>
+    <rect x="14" y="2" width="1" height="2" fill="#22c55e"/>
+    <rect x="13" y="1" width="1" height="1" fill="#4ade80"/>
+    <rect x="6" y="11" width="4" height="3" fill="#14532d"/>
+    <rect x="6" y="14" width="2" height="1" fill="#78350f"/>
+    <rect x="8" y="14" width="2" height="1" fill="#78350f"/>
+  </svg>`,
+
+  berserker: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect x="6" y="1" width="4" height="2" fill="#7f1d1d"/>
+    <rect x="5" y="2" width="1" height="1" fill="#7f1d1d"/>
+    <rect x="10" y="2" width="1" height="1" fill="#7f1d1d"/>
+    <rect x="6" y="3" width="4" height="2" fill="#fca5a5"/>
+    <rect x="7" y="4" width="1" height="1" fill="#dc2626"/>
+    <rect x="9" y="4" width="1" height="1" fill="#dc2626"/>
+    <rect x="5" y="5" width="6" height="1" fill="#991b1b"/>
+    <rect x="5" y="6" width="6" height="4" fill="#fca5a5"/>
+    <rect x="6" y="7" width="4" height="2" fill="#dc2626"/>
+    <rect x="4" y="6" width="1" height="3" fill="#991b1b"/>
+    <rect x="11" y="6" width="1" height="3" fill="#991b1b"/>
+    <rect x="2" y="3" width="2" height="2" fill="#9ca3af"/>
+    <rect x="1" y="4" width="1" height="1" fill="#6b7280"/>
+    <rect x="3" y="5" width="1" height="6" fill="#78350f"/>
+    <rect x="12" y="3" width="2" height="2" fill="#9ca3af"/>
+    <rect x="14" y="4" width="1" height="1" fill="#6b7280"/>
+    <rect x="12" y="5" width="1" height="6" fill="#78350f"/>
+    <rect x="6" y="10" width="4" height="3" fill="#7f1d1d"/>
+    <rect x="6" y="13" width="2" height="2" fill="#4b5563"/>
+    <rect x="8" y="13" width="2" height="2" fill="#4b5563"/>
+  </svg>`,
+};
+
+// ============================================================
+// ESTADO DO TORNEIO
+// ============================================================
+const MAX_ROUNDS = 5;
+const WIN_THRESHOLD = 3;
+
+const tournament = {
+  round: 1,
+  playerScore: 0,
+  opponentScore: 0,
+  history: [],      // ['W','L','D', ...]
+  lastTeam: null    // impede repetir a combinação exata
+};
+
+let champions = [];
+let selected = [];
+let battleData = null;
+let skipAnimation = false;
+let speedMultiplier = 1;
+const STATE = {};   // estado vivo durante a batalha
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  await checkHealth();
+  await loadChampions();
+  setupEvents();
+  updateScoreboard();
+}
+
+async function checkHealth() {
+  const statusEl = document.getElementById('status');
+  try {
+    const r = await fetch('/health');
+    if (r.ok) {
+      statusEl.textContent = '● SISTEMA ONLINE';
+      statusEl.classList.add('online');
+    }
+  } catch {
+    statusEl.textContent = '● OFFLINE';
+  }
+}
+
+async function loadChampions() {
+  const r = await fetch('/champions');
+  champions = await r.json();
+}
+
+function setupEvents() {
+  document.getElementById('btn-start').onclick = startRound;
+  document.getElementById('btn-skip').onclick = () => { skipAnimation = true; };
+  document.getElementById('btn-next-round').onclick = goToNextRound;
+  document.getElementById('btn-restart').onclick = restartTournament;
+
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      speedMultiplier = parseInt(btn.dataset.speed);
+    };
+  });
+}
+
+// ============================================================
+// TELA DE SELEÇÃO
+// ============================================================
+function showSelectionScreen() {
+  document.getElementById('screen-battle').classList.add('hidden');
+  document.getElementById('screen-round-result').classList.add('hidden');
+  document.getElementById('screen-final').classList.add('hidden');
+  document.getElementById('screen-select').classList.remove('hidden');
+
+  document.getElementById('round-banner').textContent = `ROUND ${tournament.round} / ${MAX_ROUNDS}`;
+  document.getElementById('warning-msg').textContent = '';
+
+  selected = [];
+  document.getElementById('selected-count').textContent = '0';
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-start').textContent = '▶ BATALHAR';
+
+  renderSelectionGrid();
+}
+
+function renderSelectionGrid() {
+  const grid = document.getElementById('champion-grid');
+  grid.innerHTML = champions.map(c => `
+    <div class="card" data-id="${c.id}" onclick="toggleSelect('${c.id}')">
+      ${SPRITES[c.id] || ''}
+      <div class="card-name">${c.name}</div>
+      <div class="card-stats">
+        HP: ${c.hp}<br>
+        ATK: ${c.atk} | DEF: ${c.def}<br>
+        <span style="color:var(--accent)">${c.skill}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleSelect(id) {
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  const idx = selected.indexOf(id);
+  if (idx >= 0) {
+    selected.splice(idx, 1);
+    card.classList.remove('selected');
+  } else {
+    if (selected.length >= 5) return;
+    selected.push(id);
+    card.classList.add('selected');
+  }
+  document.getElementById('selected-count').textContent = selected.length;
+
+  // Valida se é o mesmo time da rodada anterior
+  const sameAsLast = isSameTeamAsLast(selected);
+  const warningEl = document.getElementById('warning-msg');
+  if (sameAsLast) {
+    warningEl.textContent = '⚠ MUDE A COMBINAÇÃO! Não pode ser igual à rodada anterior.';
+    document.getElementById('btn-start').disabled = true;
+  } else {
+    warningEl.textContent = '';
+    document.getElementById('btn-start').disabled = selected.length < 1;
+  }
+}
+
+function isSameTeamAsLast(team) {
+  if (!tournament.lastTeam) return false;
+  if (team.length !== tournament.lastTeam.length) return false;
+  const sortedA = [...team].sort().join(',');
+  const sortedB = [...tournament.lastTeam].sort().join(',');
+  return sortedA === sortedB;
+}
+
+// ============================================================
+// INICIAR RODADA — POST /game/start
+// ============================================================
+async function startRound() {
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true;
+  btn.textContent = 'CARREGANDO...';
+
+  try {
+    const r = await fetch('/game/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        player_id: 'web_player',
+        team: selected,
+        request_id: `tour_${Date.now()}_r${tournament.round}`
+      })
+    });
+    battleData = await r.json();
+    tournament.lastTeam = [...selected];
+
+    showBattleScreen();
+    await playBattle();
+  } catch (e) {
+    alert('Erro ao iniciar rodada: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '▶ BATALHAR';
+  }
+}
+
+// ============================================================
+// TELA DE BATALHA
+// ============================================================
+function showBattleScreen() {
+  document.getElementById('screen-select').classList.add('hidden');
+  document.getElementById('screen-battle').classList.remove('hidden');
+  document.getElementById('round-banner-battle').textContent = `ROUND ${tournament.round} / ${MAX_ROUNDS}`;
+
+  STATE.player = battleData.player_team.map((id, i) => ({
+    uid: `p${i}`, id, ...findStats(id), currentHp: findStats(id).hp, side: 'P'
+  }));
+  STATE.opponent = battleData.opponent_team.map((id, i) => ({
+    uid: `o${i}`, id, ...findStats(id), currentHp: findStats(id).hp, side: 'O'
+  }));
+
+  renderTeam('player-team', STATE.player);
+  renderTeam('opponent-team', STATE.opponent);
+  document.getElementById('battle-log').innerHTML = '';
+  skipAnimation = false;
+}
+
+function findStats(id) {
+  return champions.find(c => c.id === id);
+}
+
+function renderTeam(containerId, team) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = team.map(champ => `
+    <div class="card" id="card-${champ.uid}" data-uid="${champ.uid}">
+      ${SPRITES[champ.id] || ''}
+      <div class="card-name">${champ.name}</div>
+      <div class="card-stats">ATK:${champ.atk} DEF:${champ.def}</div>
+      <div class="hp-bar">
+        <div class="hp-fill" id="hp-${champ.uid}" style="width:100%"></div>
+        <div class="hp-text" id="hptext-${champ.uid}">${champ.currentHp}/${champ.hp}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// ANIMAÇÃO SIMULTÂNEA POR TURNO
+// ============================================================
+async function playBattle() {
+  const log = battleData.battle_log;
+  const byTurn = groupByTurn(log);
+
+  for (const turnNum of Object.keys(byTurn).map(Number).sort((a, b) => a - b)) {
+    const entries = byTurn[turnNum];
+    await processTurn(turnNum, entries);
+    if (!skipAnimation) await sleep(baseDelay(400));
+  }
+
+  await sleep(500);
+  showRoundResult();
+}
+
+function groupByTurn(log) {
+  const byTurn = {};
+  for (const entry of log) {
+    if (!byTurn[entry.turn]) byTurn[entry.turn] = [];
+    byTurn[entry.turn].push(entry);
+  }
+  return byTurn;
+}
+
+async function processTurn(turnNum, entries) {
+  appendTurnHeader(turnNum);
+
+  const attacks = entries.filter(e => !e.action.includes('foi derrotado'));
+  const deaths = entries.filter(e => e.action.includes('foi derrotado'));
+
+  // FASE 1: log de todos os ataques instantaneamente
+  for (const e of attacks) appendLog(e);
+
+  // FASE 2: animação visual simultânea
+  // Todos os atacantes brilham
+  const visualEffects = attacks.map(e => setupAttackVisual(e));
+  if (!skipAnimation) await sleep(baseDelay(400));
+
+  // Todos aplicam dano simultaneamente
+  for (const fx of visualEffects) fx.applyImpact();
+  if (!skipAnimation) await sleep(baseDelay(300));
+
+  // Remove classe de ataque
+  for (const fx of visualEffects) fx.cleanup();
+
+  // FASE 3: mortes
+  if (deaths.length > 0) {
+    if (!skipAnimation) await sleep(baseDelay(200));
+    for (const d of deaths) {
+      appendLog(d);
+      applyDeath(d);
+    }
+    if (!skipAnimation) await sleep(baseDelay(300));
+  }
+}
+
+function setupAttackVisual(entry) {
+  const action = entry.action;
+  const damage = entry.damage;
+  const isSkill = action.includes('usa');
+
+  const matches = action.match(/(\w+)\[([PO])\]/g);
+  if (!matches || matches.length < 2) return { applyImpact: ()=>{}, cleanup: ()=>{} };
+
+  const [, attName, attSide] = matches[0].match(/(\w+)\[([PO])\]/);
+  const [, tgtName, tgtSide] = matches[1].match(/(\w+)\[([PO])\]/);
+
+  const attacker = findAliveChampion(attName, attSide);
+  const target = findAliveChampion(tgtName, tgtSide);
+
+  if (!attacker || !target) return { applyImpact: ()=>{}, cleanup: ()=>{} };
+
+  const attCard = document.getElementById(`card-${attacker.uid}`);
+  const tgtCard = document.getElementById(`card-${target.uid}`);
+
+  if (attCard) attCard.classList.add('attacking');
+
+  return {
+    applyImpact: () => {
+      if (tgtCard) {
+        tgtCard.classList.add('hit');
+        spawnDamageFloat(tgtCard, damage, isSkill);
+      }
+      target.currentHp = Math.max(0, target.currentHp - damage);
+      updateHpBar(target);
+    },
+    cleanup: () => {
+      if (attCard) attCard.classList.remove('attacking');
+      if (tgtCard) tgtCard.classList.remove('hit');
+    }
+  };
+}
+
+function applyDeath(entry) {
+  const match = entry.action.match(/(\w+)\[([PO])\]/);
+  if (!match) return;
+  const [, name, side] = match;
+  const team = side === 'P' ? STATE.player : STATE.opponent;
+  const dead = team.find(c => c.id === name && c.currentHp <= 0)
+            || team.find(c => c.id === name);
+  if (dead) {
+    const card = document.getElementById(`card-${dead.uid}`);
+    if (card) card.classList.add('dead');
+  }
+}
+
+function findAliveChampion(id, side) {
+  const team = side === 'P' ? STATE.player : STATE.opponent;
+  return team.find(c => c.id === id && c.currentHp > 0)
+      || team.find(c => c.id === id);
+}
+
+function updateHpBar(champ) {
+  const fill = document.getElementById(`hp-${champ.uid}`);
+  const text = document.getElementById(`hptext-${champ.uid}`);
+  if (!fill) return;
+  const pct = (champ.currentHp / champ.hp) * 100;
+  fill.style.width = pct + '%';
+  fill.className = 'hp-fill' + (pct < 30 ? ' low' : pct < 60 ? ' medium' : '');
+  if (text) text.textContent = `${champ.currentHp}/${champ.hp}`;
+}
+
+function spawnDamageFloat(card, damage, isSkill) {
+  const float = document.createElement('div');
+  float.className = 'damage-float' + (isSkill ? ' skill' : '');
+  float.textContent = isSkill ? `-${damage} ✦` : `-${damage}`;
+  card.style.position = 'relative';
+  card.appendChild(float);
+  setTimeout(() => float.remove(), 1000);
+}
+
+function appendLog(entry) {
+  const logEl = document.getElementById('battle-log');
+  const line = document.createElement('div');
+  line.className = 'log-entry';
+
+  const action = entry.action;
+  if (action.includes('foi derrotado')) line.classList.add('death');
+  else if (action.includes('usa')) line.classList.add('skill');
+  else if (action.includes('[P]') && action.indexOf('[P]') < action.indexOf('[O]')) line.classList.add('player-action');
+  else line.classList.add('opponent-action');
+
+  const dmgText = entry.damage > 0 ? ` (${entry.damage})` : '';
+  line.textContent = `${action}${dmgText}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function appendTurnHeader(turnNum) {
+  const logEl = document.getElementById('battle-log');
+  const line = document.createElement('div');
+  line.className = 'log-entry turn-header';
+  line.textContent = `━━━ TURNO ${turnNum} ━━━`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function baseDelay(ms) {
+  return ms / speedMultiplier;
+}
+
+// ============================================================
+// RESULTADO DA RODADA
+// ============================================================
+function showRoundResult() {
+  document.getElementById('screen-battle').classList.add('hidden');
+  document.getElementById('screen-round-result').classList.remove('hidden');
+
+  const title = document.getElementById('round-result-title');
+  const info = document.getElementById('round-result-info');
+  const tiebreak = document.getElementById('round-tiebreak');
+
+  let roundResult;
+  if (battleData.result === 'player') {
+    title.textContent = `✦ ROUND ${tournament.round}: VITÓRIA ✦`;
+    title.className = 'result-title win';
+    tournament.playerScore++;
+    tournament.history.push('W');
+    roundResult = 'W';
+  } else if (battleData.result === 'opponent') {
+    title.textContent = `✗ ROUND ${tournament.round}: DERROTA ✗`;
+    title.className = 'result-title lose';
+    tournament.opponentScore++;
+    tournament.history.push('L');
+    roundResult = 'L';
+  } else {
+    title.textContent = `═ ROUND ${tournament.round}: EMPATE ═`;
+    title.className = 'result-title draw';
+    tournament.history.push('D');
+    roundResult = 'D';
+  }
+
+  info.innerHTML = `
+    Batalha #${battleData.game_id}<br>
+    Turnos: ${battleData.rounds}<br>
+    Placar: ${tournament.playerScore} × ${tournament.opponentScore}
+  `;
+
+  tiebreak.textContent = battleData.tiebreak ? tiebreakMessage(battleData.tiebreak) : '';
+
+  updateScoreboard();
+
+  // Decide se é o último round
+  const btn = document.getElementById('btn-next-round');
+  const tournamentOver =
+    tournament.playerScore >= WIN_THRESHOLD ||
+    tournament.opponentScore >= WIN_THRESHOLD ||
+    tournament.round >= MAX_ROUNDS;
+
+  if (tournamentOver) {
+    btn.textContent = 'VER RESULTADO FINAL ▶';
+  } else {
+    btn.textContent = 'PRÓXIMA RODADA ▶';
+  }
+}
+
+function tiebreakMessage(reason) {
+  const messages = {
+    'hp_total': '※ Vitória decidida por HP total do time',
+    'hp_individual': '※ Vitória decidida por HP do campeão mais resistente',
+    'ambos_eliminados_tiebreak_player': '※ Ambos times caíram juntos — vitória do jogador por bonificação',
+    'tiebreak_final': '※ Empate técnico total — vitória do jogador por bonificação'
+  };
+  return messages[reason] || '';
+}
+
+function goToNextRound() {
+  const tournamentOver =
+    tournament.playerScore >= WIN_THRESHOLD ||
+    tournament.opponentScore >= WIN_THRESHOLD ||
+    tournament.round >= MAX_ROUNDS;
+
+  if (tournamentOver) {
+    showFinalResult();
+  } else {
+    tournament.round++;
+    showSelectionScreen();
+  }
+}
+
+// ============================================================
+// RESULTADO FINAL DO TORNEIO
+// ============================================================
+function showFinalResult() {
+  document.getElementById('screen-round-result').classList.add('hidden');
+  document.getElementById('screen-final').classList.remove('hidden');
+
+  const title = document.getElementById('final-title');
+  const info = document.getElementById('final-info');
+
+  if (tournament.playerScore > tournament.opponentScore) {
+    title.textContent = '★ CAMPEÃO DO TORNEIO ★';
+    title.className = 'result-title win';
+  } else if (tournament.opponentScore > tournament.playerScore) {
+    title.textContent = '✗ TORNEIO PERDIDO ✗';
+    title.className = 'result-title lose';
+  } else {
+    title.textContent = '═ TORNEIO EMPATADO ═';
+    title.className = 'result-title draw';
+  }
+
+  info.innerHTML = `
+    Placar final: ${tournament.playerScore} × ${tournament.opponentScore}<br>
+    Rodadas jogadas: ${tournament.history.length}<br>
+    Histórico: ${tournament.history.join(' · ')}
+  `;
+}
+
+function restartTournament() {
+  tournament.round = 1;
+  tournament.playerScore = 0;
+  tournament.opponentScore = 0;
+  tournament.history = [];
+  tournament.lastTeam = null;
+  updateScoreboard();
+  showSelectionScreen();
+}
+
+// ============================================================
+// SCOREBOARD
+// ============================================================
+function updateScoreboard() {
+  document.getElementById('score-player').textContent = tournament.playerScore;
+  document.getElementById('score-opponent').textContent = tournament.opponentScore;
+
+  const dotsEl = document.getElementById('history-dots');
+  dotsEl.innerHTML = '';
+  for (let i = 0; i < MAX_ROUNDS; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    const h = tournament.history[i];
+    if (h === 'W') { dot.classList.add('win'); dot.textContent = 'W'; }
+    else if (h === 'L') { dot.classList.add('lose'); dot.textContent = 'L'; }
+    else if (h === 'D') { dot.classList.add('draw'); dot.textContent = 'D'; }
+    else dot.textContent = '-';
+    dotsEl.appendChild(dot);
+  }
+}
+
+// ============================================================
+// UTIL
+// ============================================================
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// BOOT
+(async () => {
+  await init();
+  showSelectionScreen();
+})();
+</script>
+</body>
+</html>
