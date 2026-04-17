@@ -193,7 +193,7 @@ autochess-distributed/
 
 ## 👥 Equipe
 
-- [Seu Nome]
+- Abner Silveira
 - Gabriel Forza
 - Maria Clara
 
